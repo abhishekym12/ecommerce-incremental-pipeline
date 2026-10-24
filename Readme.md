@@ -22,58 +22,33 @@ The pipeline is built to handle real-world edge cases, including malformed data 
 
 ```mermaid
 graph TD
-    A["Mock API Generator"] --> B[("Landing Zone: JSON")]
-    B --> C{"Auto Loader"}
-    
-    C -->|"Schema Valid"| D[("Bronze: Raw Events")]
-    C -->|"Schema Mismatch"| E[("Dead Letter Queue")]
-    
-    D --> F["PySpark foreachBatch"]
-    
-    F -->|"Status = Success"| G[("Silver: Clean Subscriptions")]
-    F -->|"Status = Failed"| H[("Silver: Failed Payments")]
-    
-    G --> I["Snowflake Python Connector"]
-    
-    I --> J[("Staging: STG_SUBSCRIPTIONS")]
-    J --> K["SQL MERGE (SCD Type 2)"]
-    K --> L[("Gold: DIM_SUBSCRIPTIONS")]
+    %% 1. Define Custom Colors (Required before applying)
+    classDef source fill:#f9f2f4,stroke:#d0a9b5,stroke-width:2px,color:#000
+    classDef storage fill:#fff3e0,stroke:#ffb74d,stroke-width:2px,color:#000
+    classDef databricks fill:#e6f3ff,stroke:#82b1ff,stroke-width:2px,color:#000
+    classDef alert fill:#ffebee,stroke:#ef5350,stroke-width:2px,color:#000
+    classDef snowflake fill:#e6f7fa,stroke:#4dd0e1,stroke-width:2px,color:#000
 
-    %% Nodes
-    A([Mock API / Python Generator])
-    B[(Landing Zone: JSON files)]
-    C{Auto Loader}
-    D[(Bronze Table: Raw Events)]
-    E[(Dead Letter Queue)]
-    F[PySpark foreachBatch]
-    G[(Silver Table: Success)]
-    H[(Silver Table: Failures)]
-    I[Snowflake Python Connector]
-    J[(Staging: STG_SUBSCRIPTIONS)]
-    K[SQL MERGE: SCD Type 2]
-    L[(Gold: DIM_SUBSCRIPTIONS)]
-
-    %% Flow
-    A -->|"Streams events"| B
-    B -->|"Reads incrementally"| C
-    C -->|"Schema valid"| D
-    C -->|"Schema mismatch"| E
+    %% 2. Define Nodes, Connections, and Apply Styles in one pass
+    A([Mock API Generator]):::source -->|Streams JSON| B[(Landing Zone)]:::storage
     
-    D -->|"Micro-batch stream"| F
-    F -->|"Status = 'success'"| G
-    F -->|"Status = 'failed'"| H
+    B -->|Reads incrementally| C{Databricks Auto Loader}:::databricks
     
-    G -->|"toPandas() micro-batch"| I
-    I -->|"Auto-creates/Truncates"| J
-    J -->|"INSERT / UPDATE"| K
-    K -->|"Maintains History"| L
-
-    %% Apply Styles
-    class A source;
-    class B storage;
-    class C,D,F,G,H databricks;
-    class E alert;
-    class I,J,K,L snowflake;
+    C -->|Schema Valid| D[(Bronze: Raw Events)]:::databricks
+    C -->|Schema Mismatch| E[(Dead Letter Queue)]:::alert
+    
+    D -->|Micro-batch Stream| F[PySpark foreachBatch]:::databricks
+    
+    F -->|Status: Success| G[(Silver: Clean Data)]:::databricks
+    F -->|Status: Failed| H[(Silver: Failed Payments)]:::databricks
+    
+    G -->|toPandas payload| I[Snowflake Python Connector]:::snowflake
+    
+    I -->|Truncate & Load| J[(Staging: STG_SUBSCRIPTIONS)]:::snowflake
+    
+    J -->|SCD Type 2| K{SQL MERGE}:::snowflake
+    
+    K -->|Maintains History| L[(Gold: DIM_SUBSCRIPTIONS)]:::snowflake
 
 ## 💡 Key Engineering Features Highlighted
 * **Cost-Optimized Micro-Batching:** Utilized Databricks Auto Loader with `Trigger.AvailableNow=True` to process continuous data in scheduled, cost-efficient batches rather than running expensive 24/7 streaming clusters.
