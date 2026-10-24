@@ -18,6 +18,17 @@ The pipeline is built to handle real-world edge cases, including malformed data 
 4. **Silver Layer (Transformation & Routing):** PySpark flattens nested JSON structures (`payment_details`). A `foreachBatch` function splits the micro-batch, routing successful transactions to the main Silver table and isolating failed transactions into a separate table for downstream analysis.
 5. **Gold Layer (Snowflake & SCD Type 2):** Clean data is pushed to a Snowflake Staging table using the Snowflake Python Connector. A native SQL `MERGE` statement is then executed to update the final `DIM_SUBSCRIPTIONS` table, implementing **Slowly Changing Dimensions (SCD Type 2)** to track user upgrades and downgrades over time.
 
+## 💡 Key Engineering Features Highlighted
+* **Cost-Optimized Micro-Batching:** Utilized Databricks Auto Loader with `Trigger.AvailableNow=True` to process continuous data in scheduled, cost-efficient batches rather than running expensive 24/7 streaming clusters.
+* **Resilient Error Handling:** Implemented PySpark's `badRecordsPath` to capture and quarantine schema violations into a DLQ, ensuring pipeline stability and zero data loss.
+* **Historical Data Tracking (CDC):** Designed an SCD Type 2 architecture in Snowflake using `MERGE` and `UNION ALL` statements to preserve the full timeline of user subscription changes (e.g., tracking exactly when a user upgraded from Basic to Premium).
+* **Cross-Platform Integration:** Successfully navigated cloud security boundaries by using Databricks Secrets for credential management and bridging Databricks Unity Catalog with Snowflake.
+
+## 📂 Repository Structure
+* `/data_generator` - Contains the `mock_api_generator.py` script that streams data to Databricks.
+* `/databricks_src` - Contains the PySpark notebook handling the Bronze, Silver, and Gold transformations.
+* `/snowflake_sql` - Contains the DDL scripts used to build the target Snowflake environment.
+
 ## 🔄 Data Flow Architecture
 
 ```mermaid
@@ -49,14 +60,3 @@ graph TD
     J -->|SCD Type 2| K{SQL MERGE}:::snowflake
     
     K -->|Maintains History| L[(Gold: DIM_SUBSCRIPTIONS)]:::snowflake
-
-## 💡 Key Engineering Features Highlighted
-* **Cost-Optimized Micro-Batching:** Utilized Databricks Auto Loader with `Trigger.AvailableNow=True` to process continuous data in scheduled, cost-efficient batches rather than running expensive 24/7 streaming clusters.
-* **Resilient Error Handling:** Implemented PySpark's `badRecordsPath` to capture and quarantine schema violations into a DLQ, ensuring pipeline stability and zero data loss.
-* **Historical Data Tracking (CDC):** Designed an SCD Type 2 architecture in Snowflake using `MERGE` and `UNION ALL` statements to preserve the full timeline of user subscription changes (e.g., tracking exactly when a user upgraded from Basic to Premium).
-* **Cross-Platform Integration:** Successfully navigated cloud security boundaries by using Databricks Secrets for credential management and bridging Databricks Unity Catalog with Snowflake.
-
-## 📂 Repository Structure
-* `/data_generator` - Contains the `mock_api_generator.py` script that streams data to Databricks.
-* `/databricks_src` - Contains the PySpark notebook handling the Bronze, Silver, and Gold transformations.
-* `/snowflake_sql` - Contains the DDL scripts used to build the target Snowflake environment.
